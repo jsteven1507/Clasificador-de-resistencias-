@@ -1,0 +1,295 @@
+import numpy as np #librería en la que se define un tipo de dato que representa matrices multidimensionales
+# además incluye algunas funcionalidades básicas para trabajar con ellas
+
+import cv2 #OpenCV es una biblioteca libre de visión artificial originalmente desarrollada por Intel
+import math # se importa la biblioteca math
+import xlsxwriter
+ima="C:/Users/Steven/Documents/8 semestre/inteligencia artificial/Resistencias/"
+
+workbook = xlsxwriter.Workbook("C:/Users/Steven/Documents/8 semestre/inteligencia artificial/relaciones.xlsx")
+worksheet = workbook.add_worksheet()
+
+poten=[12,14]
+
+
+for pote in range (2):
+
+    potencia=poten[pote]
+    if potencia == 12:
+
+        resis=[120,330,390,820,1000,1200,1500,2200,3300,3900,5100]
+        d12 = len(resis)
+        hue1 = np.zeros(((d12) * 15, 50))
+        value1 = np.zeros(d12 * 15)
+        relacion1 = np.zeros(d12 * 15)
+    else:
+
+        resis = [100,120,220,270,330,390,750,820,1000,1200, 1500, 2200, 3300,3900,4700, 5100, 5600, 10000]
+        d14 = len(resis)
+        hue2 = np.zeros(((d14) * 15, 50))
+        value2 = np.zeros(d14 * 15)
+        relacion2 = np.zeros(d14 * 15)
+
+    fila=len(resis)
+
+    formato="jpg"
+
+
+    for nures in range (fila):
+        for numero in range(15):
+            if numero<10:
+                numer=str(0)+str(numero)
+            else:
+                numer=str(numero)
+
+
+            imag=ima+str(resis[nures])+"_"+str(potencia)+"_"+numer+"."+formato
+            print(imag)
+            image=cv2.imread(imag) #Se importa la imagen de la direccion fijada
+
+            scale_percent = 25  # percent of original size
+            width = int(image.shape[1] * scale_percent / 100)
+            height = int(image.shape[0] * scale_percent / 100)
+            dim = (width, height)
+            # resize image
+            image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
+
+            # se transforma a escala de grises la imagen de entrada
+            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+            # 2 Find Threshold
+            gray_blur = cv2.GaussianBlur(gray, (7, 7), 0)
+            bola = cv2.adaptiveThreshold(gray_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 17, 3)
+
+            canny = cv2.Canny(bola, 150, 200)
+            #
+            cannyy = (cv2.dilate(canny, None, iterations=5))
+
+            cnts, hierarchy = cv2.findContours(cannyy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            max = 0
+            pos_max = 0
+            for c in cnts:
+                area = cv2.contourArea(c)
+                if cv2.contourArea(c) > max:
+                    pos_max = c
+                    max = cv2.contourArea(c)
+                    rect_m = cv2.minAreaRect(c)
+            im = np.zeros_like(gray)
+
+            imas = cv2.drawContours(im, [pos_max], 0, (255, 255, 255), -1)
+            im = cv2.bitwise_and(imas, gray)
+            cv2.floodFill(im, None, (0, 0), 255)
+
+
+            image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            h = cv2.calcHist([image_hsv], [0], imas, [180], [6, 180])
+            s = cv2.calcHist([image_hsv], [1], imas, [255], [6, 254])
+            v = cv2.calcHist([image_hsv], [2], imas, [255], [0, 253])
+            mh = int(h.argmax())
+            ms = int(s.argmax())
+            mv = int(v.argmax())
+            #print(mh)
+            #print(ms)
+            #print(mv)
+            lim_inf = (mh - 74, 0, 0)
+            lim_sup = (mh + 200, ms + 50, 255)
+            mask_grass = cv2.inRange(image_hsv, lim_inf, lim_sup)
+            mask_not_grass = cv2.bitwise_not(mask_grass)
+
+            re, b = cv2.threshold(im, 2, 254, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            threshold = re - 10
+            ret, bolas = cv2.threshold(im, threshold, 255, cv2.THRESH_BINARY)
+
+            threshold = re - 125
+            ret, negro = cv2.threshold(im, threshold, 255, cv2.THRESH_BINARY)
+            # ret, bola = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            bolas = cv2.bitwise_not(bolas)
+
+            resul1 = cv2.bitwise_and(bolas, negro)
+
+            resistencia=resis[nures]
+            if potencia == 12 and (resistencia == 120 or resistencia == 390 or resistencia == 270):
+                resul = cv2.bitwise_and(mask_not_grass, mask_not_grass)
+            else:
+                resul = cv2.bitwise_and(mask_not_grass, bolas)
+
+            m = 3
+            kernel = np.ones((m, m), np.uint8)
+            bolass = cv2.morphologyEx(resul, cv2.MORPH_OPEN, kernel)
+            bola = cv2.morphologyEx(bolass, cv2.MORPH_CLOSE, kernel)
+
+            canny = cv2.Canny(bola, 150, 200)
+            #
+            ite = 3
+            if potencia == 12 and (resistencia == 3300 or resistencia == 270 ):
+                ite = 5
+            cannyy = (cv2.dilate(canny, None, iterations=ite))
+
+            cnts, hierarchy = cv2.findContours(cannyy, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            max = 0
+            pos_max = 0
+            for c in cnts:
+                rect = cv2.minAreaRect(c)
+                centro, medidas, angulo = rect
+                w, h = medidas
+                if w > h:
+                    aspect_ratio = (w / h)
+                else:
+                    aspect_ratio = (h / w)
+                area = cv2.contourArea(c)
+                if cv2.contourArea(c) > max:
+                    pos_max = c
+                    max = cv2.contourArea(c)
+                    rect_m = rect
+
+            i = np.zeros_like(gray)
+            #
+            an = cv2.drawContours(i, [pos_max], 0, (255, 255, 255), -1)
+            # an=cv2.bitwise_and(i,bolass)
+
+            centro, medidas, angulo = rect_m
+            w, h = medidas
+            if w > h:
+                lon = h
+            else:
+                lon = w
+            m = int(lon / 2.4475)
+            kernel = np.ones((m, m), np.uint8)
+            bolass = cv2.morphologyEx(an, cv2.MORPH_OPEN, kernel)
+            bolass = cv2.morphologyEx(bolass, cv2.MORPH_CLOSE, kernel)
+
+            cnts, hierarchy = cv2.findContours(bolass, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            for c in cnts:
+                rect = cv2.minAreaRect(c)
+                centro, medidas, angulo = rect
+                w, h = medidas
+                if w > h:
+                    aspect_ratio = (w / h)
+                else:
+                    aspect_ratio = (h / w)
+
+                if (aspect_ratio > 2) and aspect_ratio <3.994:
+                    rect_m = rect
+                    aspect_ratio_m = aspect_ratio
+            box = cv2.boxPoints(rect_m)
+            box = np.int0(box)
+            #im = cv2.drawContours(image, [box], 0, (0, 255, 0), 2)
+
+
+            centro, medidas, angulo = rect  # se obtienen las propiedades del rectangulo
+            w, h = medidas  # se obtiene ancho y altura
+
+            # Se encuentra los extremos del rectangulo dependiendo de la orientacion
+            if h > w:
+                p1 = box[2]
+                pts1 = np.array([box[2], box[3], box[1], box[0]], np.int32)
+                y = int(h)
+                x = int(w)
+
+            else:
+                p1 = box[1]
+                pts1 = np.array([box[1], box[2], box[0], box[3]], np.int32)
+                y = int(w)
+                x = int(h)
+
+            p10 = p1[0]
+            p11 = p1[1]
+
+            x = 17
+            y = 50
+            # se encuentran los puntos que tendria el rectangulo sin inclinacion
+            pts2 = np.array([p1, [p1[0] + y, p1[1]], [p1[0], p1[1] + x], [p1[0] + y, p1[1] + x]], np.int32)
+
+            # se realiza homografia con los pts1 y pts2
+            H, _ = cv2.findHomography(pts1, pts2, method=cv2.RANSAC)
+            image_w = cv2.warpPerspective(image, H, (image.shape[1], image.shape[0]))
+
+            # Se extrae la zona de la placa
+            pl = image_w[p11:p11 + x, p10:p10 + y]
+            plhsv = cv2.cvtColor(pl, cv2.COLOR_BGR2HSV)  # se convierte a espacio HSV
+            #vector = plhsv[8, :]
+            #vector = vector[:, 0]
+            hue, s, v = cv2.split(plhsv)
+            vector= (np.mean(hue, axis=0)).astype(int)
+            lim_inf = (8, 37, 30)
+            lim_sup = (56, 111, 156)
+
+            maskk = cv2.inRange(plhsv, lim_inf, lim_sup)  # se aplica la mascara de color
+            cnts, hierarchy = cv2.findContours(maskk, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+            max = 0
+            pos_max = 0
+            succes = 0
+            for c in cnts:
+                if cv2.contourArea(c) > max:
+                    pos_max = c
+                    max = cv2.contourArea(c)
+                    succes = 1
+            if succes == 1:
+                i = np.zeros_like(maskk)
+                #
+                an = cv2.drawContours(i, [pos_max], 0, (255, 255, 255), -1)
+                cnt = pos_max
+                M = cv2.moments(cnt)
+                cx = int(M['m10'] / M['m00'])
+                print(cx)
+                if cx <= 25:
+                    vector = np.flip(vector)
+
+            if potencia==12:
+                relacion1[ numero + (nures * 15) ] = aspect_ratio_m
+                hue1[numero + (nures * 15)] = vector
+                value1[numero + (nures * 15)] = resis[nures]
+            else:
+                relacion2[ numero + (nures * 15) ] = aspect_ratio_m
+                hue2[numero + (nures * 15)] = vector
+                value2[numero + (nures * 15)] = resis[nures]
+            print(numero)
+
+
+
+#print(relacion1)
+#print(relacion2)
+eti1=np.ones(15*d12)*12
+eti2=np.ones(15*d14)*14
+
+
+c = np.concatenate((relacion1,relacion2), axis=0)
+value = np.concatenate((value1,value2), axis=0)
+eti=np.concatenate((eti1,eti2), axis=0)
+eti=eti.astype(int)
+
+row = 0
+col = 0
+worksheet.write_column(row, col, c)
+row = 0
+col = 1
+worksheet.write_column(row, col, eti)
+row = 0
+col = 2
+worksheet.write_column(row, col, value)
+workbook.close()
+
+workbook = xlsxwriter.Workbook("C:/Users/Steven/Documents/8 semestre/inteligencia artificial/vector.xlsx")
+worksheet = workbook.add_worksheet()
+
+
+hue = np.concatenate((hue1,hue2), axis=0)
+hue=hue.astype(int)
+to=np.zeros(((15*d12)+(15*d14),52))
+to[:,0]=eti
+to[:,1]=value
+to[:,2:53]=hue
+
+row = 0
+col = 0
+for col,data in enumerate(to):
+    worksheet.write_column(row,col,data)
+
+workbook.close()
+
+
+cv2.imshow("Imag",bolass)
+cv2.imshow("Img",image)
+cv2.waitKey(0)
+cv2.destroyAllWindows()
+
